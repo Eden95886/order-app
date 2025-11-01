@@ -190,17 +190,19 @@ async function initDatabase() {
           await client.query(statement + ';')
         } catch (error) {
           // 이미 존재하는 객체는 무시하고 계속 진행
-          if (error.message.includes('already exists') || 
-              error.message.includes('duplicate key') ||
-              error.message.includes('duplicate table') ||
-              error.message.includes('duplicate object') ||
-              error.message.includes('ON CONFLICT') ||
-              error.message.includes('no unique or exclusion constraint matching the ON CONFLICT') ||
+          const errorMessage = error?.message || error?.toString() || String(error)
+          if (errorMessage.includes('already exists') || 
+              errorMessage.includes('duplicate key') ||
+              errorMessage.includes('duplicate table') ||
+              errorMessage.includes('duplicate object') ||
+              errorMessage.includes('ON CONFLICT') ||
+              errorMessage.includes('no unique or exclusion constraint matching the ON CONFLICT') ||
+              errorMessage.includes('there is no unique or exclusion constraint matching the ON CONFLICT') ||
               error.code === '42P07' || // relation already exists
               error.code === '42710' || // duplicate object
               error.code === '42723' || // function already exists
               error.code === '42P16') { // invalid table definition (제약조건 관련)
-            console.log(`⚠️ 경고 (무시): ${error.message.split('\n')[0]}`)
+            console.log(`⚠️ 경고 (무시): ${errorMessage.split('\n')[0]}`)
           } else {
             // 심각한 오류는 재throw
             console.error(`❌ SQL 실행 오류: ${statement.substring(0, 100)}...`)
@@ -219,12 +221,14 @@ async function initDatabase() {
       }
       
       // ON CONFLICT 오류는 경고만 출력하고 계속 진행
-      if (error.message.includes('ON CONFLICT') || 
-          error.message.includes('no unique or exclusion constraint matching the ON CONFLICT')) {
-        console.log(`⚠️ 경고 (ON CONFLICT 오류 - 계속 진행): ${error.message.split('\n')[0]}`)
+      const errorMessage = error?.message || error?.toString() || String(error)
+      if (errorMessage.includes('ON CONFLICT') || 
+          errorMessage.includes('no unique or exclusion constraint matching the ON CONFLICT') ||
+          errorMessage.includes('there is no unique or exclusion constraint matching the ON CONFLICT')) {
+        console.log(`⚠️ 경고 (ON CONFLICT 오류 - 계속 진행): ${errorMessage.split('\n')[0]}`)
         console.log('✅ 스키마 생성 완료 (일부 오류 무시)')
       } else {
-        console.error('❌ 스키마 생성 중 오류:', error.message)
+        console.error('❌ 스키마 생성 중 오류:', errorMessage)
         throw error
       }
     } finally {
@@ -260,18 +264,20 @@ async function initDatabase() {
           await seedClient.query(statement + ';')
         } catch (error) {
           // 이미 존재하는 데이터는 무시
-          if (error.message.includes('already exists') || 
-              error.message.includes('duplicate key') ||
-              error.message.includes('unique constraint') ||
+          const errorMessage = error?.message || error?.toString() || String(error)
+          if (errorMessage.includes('already exists') || 
+              errorMessage.includes('duplicate key') ||
+              errorMessage.includes('unique constraint') ||
               error.code === '23505') { // unique_violation
-            console.log(`⚠️ 경고 (무시): ${error.message.split('\n')[0]}`)
-          } else if (error.message.includes('ON CONFLICT') || 
-                     error.message.includes('no unique or exclusion constraint matching the ON CONFLICT')) {
+            console.log(`⚠️ 경고 (무시): ${errorMessage.split('\n')[0]}`)
+          } else if (errorMessage.includes('ON CONFLICT') || 
+                     errorMessage.includes('no unique or exclusion constraint matching the ON CONFLICT') ||
+                     errorMessage.includes('there is no unique or exclusion constraint matching the ON CONFLICT')) {
             // ON CONFLICT 오류는 무시 (seed.sql에는 ON CONFLICT가 없지만, 혹시 모를 경우를 대비)
-            console.log(`⚠️ 경고 (ON CONFLICT 오류 무시 - 계속 진행): ${error.message.split('\n')[0]}`)
+            console.log(`⚠️ 경고 (ON CONFLICT 오류 무시 - 계속 진행): ${errorMessage.split('\n')[0]}`)
           } else {
             console.error(`❌ 시드 데이터 실행 오류: ${statement.substring(0, 100)}...`)
-            console.error(`오류 상세: ${error.message}`)
+            console.error(`오류 상세: ${errorMessage}`)
             throw error
           }
         }
@@ -287,12 +293,14 @@ async function initDatabase() {
       }
       
       // ON CONFLICT 오류는 경고만 출력하고 계속 진행
-      if (error.message.includes('ON CONFLICT') || 
-          error.message.includes('no unique or exclusion constraint matching the ON CONFLICT')) {
-        console.log(`⚠️ 경고 (ON CONFLICT 오류 - 계속 진행): ${error.message.split('\n')[0]}`)
+      const errorMessage = error?.message || error?.toString() || String(error)
+      if (errorMessage.includes('ON CONFLICT') || 
+          errorMessage.includes('no unique or exclusion constraint matching the ON CONFLICT') ||
+          errorMessage.includes('there is no unique or exclusion constraint matching the ON CONFLICT')) {
+        console.log(`⚠️ 경고 (ON CONFLICT 오류 - 계속 진행): ${errorMessage.split('\n')[0]}`)
         console.log('✅ 초기 데이터 삽입 완료 (일부 오류 무시)')
       } else {
-        console.error('❌ 초기 데이터 삽입 중 오류:', error.message)
+        console.error('❌ 초기 데이터 삽입 중 오류:', errorMessage)
         throw error
       }
     } finally {
@@ -303,14 +311,22 @@ async function initDatabase() {
     console.log('✅ 데이터베이스 초기화 완료!')
   } catch (error) {
     // 최상위 오류 처리: ON CONFLICT 오류는 치명적이지 않음
-    if (error.message && (
-        error.message.includes('ON CONFLICT') || 
-        error.message.includes('no unique or exclusion constraint matching the ON CONFLICT'))) {
-      console.log(`⚠️ 경고 (ON CONFLICT 오류 - 계속 진행): ${error.message.split('\n')[0]}`)
+    // error 객체의 다양한 형태를 처리
+    const errorMessage = typeof error === 'string' 
+      ? error 
+      : (error?.message || error?.toString() || JSON.stringify(error))
+    
+    // ON CONFLICT 관련 오류 체크
+    if (errorMessage.includes('ON CONFLICT') || 
+        errorMessage.includes('no unique or exclusion constraint matching the ON CONFLICT') ||
+        errorMessage.includes('there is no unique or exclusion constraint matching the ON CONFLICT')) {
+      console.log(`⚠️ 경고 (ON CONFLICT 오류 - 계속 진행): ${errorMessage.split('\n')[0]}`)
       console.log('✅ 데이터베이스 초기화 완료 (일부 오류 무시)')
       process.exit(0) // 성공으로 종료
     } else {
       console.error('❌ 데이터베이스 초기화 오류:', error)
+      console.error('오류 타입:', typeof error)
+      console.error('오류 메시지:', errorMessage)
       process.exit(1)
     }
   }
