@@ -223,10 +223,63 @@ async function initDatabase() {
 
     // 시드 파일 읽기 및 실행
     const seedPath = join(__dirname, 'seed.sql')
-    const seed = readFileSync(seedPath, 'utf-8')
+    const seedContent = readFileSync(seedPath, 'utf-8')
     console.log('초기 데이터 삽입 중...')
-    await pool.query(seed)
-    console.log('✅ 초기 데이터 삽입 완료')
+    
+    // 시드 파일을 개별 명령어로 분리하여 실행 (오류 처리 강화)
+    const seedClient = await pool.connect()
+    try {
+      await seedClient.query('BEGIN')
+      
+      // 주석 제거
+      let cleanedSeed = seedContent
+        .split('\n')
+        .filter(line => !line.trim().startsWith('--'))
+        .join('\n')
+      
+      // 세미콜론으로 구분
+      const seedStatements = cleanedSeed
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.length > 5) // 최소 길이 체크
+      
+      for (const statement of seedStatements) {
+        if (!statement) continue
+        
+        try {
+          await seedClient.query(statement + ';')
+        } catch (error) {
+          // 이미 존재하는 데이터는 무시
+          if (error.message.includes('already exists') || 
+              error.message.includes('duplicate key') ||
+              error.message.includes('unique constraint') ||
+              error.code === '23505') { // unique_violation
+            console.log(`⚠️ 경고 (무시): ${error.message.split('\n')[0]}`)
+          } else if (error.message.includes('ON CONFLICT') || 
+                     error.message.includes('no unique or exclusion constraint matching the ON CONFLICT')) {
+            // ON CONFLICT 오류는 무시 (seed.sql에는 ON CONFLICT가 없지만, 혹시 모를 경우를 대비)
+            console.log(`⚠️ 경고 (ON CONFLICT 오류 무시 - 계속 진행): ${error.message.split('\n')[0]}`)
+          } else {
+            console.error(`❌ 시드 데이터 실행 오류: ${statement.substring(0, 100)}...`)
+            console.error(`오류 상세: ${error.message}`)
+            throw error
+          }
+        }
+      }
+      
+      await seedClient.query('COMMIT')
+      console.log('✅ 초기 데이터 삽입 완료')
+    } catch (error) {
+      try {
+        await seedClient.query('ROLLBACK')
+      } catch (rollbackError) {
+        // 롤백 오류는 무시
+      }
+      console.error('❌ 초기 데이터 삽입 중 오류:', error.message)
+      throw error
+    } finally {
+      seedClient.release()
+    }
 
     await pool.end()
     console.log('✅ 데이터베이스 초기화 완료!')
