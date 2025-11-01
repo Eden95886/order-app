@@ -1,5 +1,9 @@
 // API 기본 URL
-const API_BASE_URL = 'http://localhost:3000/api'
+// 배포 시: 환경 변수 VITE_API_URL 사용
+// 개발 시: 기본값 http://localhost:3000/api 사용
+const API_BASE_URL = import.meta.env.VITE_API_URL 
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : 'http://localhost:3000/api'
 
 // API 요청 헬퍼 함수
 async function fetchAPI(endpoint, options = {}) {

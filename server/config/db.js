@@ -11,6 +11,10 @@ const pool = new Pool({
   max: 20, // 연결 풀의 최대 연결 수
   idleTimeoutMillis: 30000, // 유휴 연결 타임아웃 (30초)
   connectionTimeoutMillis: 2000, // 연결 타임아웃 (2초)
+  // Render.com PostgreSQL은 SSL 연결이 필요할 수 있음
+  ssl: process.env.NODE_ENV === 'production' && process.env.DB_HOST?.includes('render.com') 
+    ? { rejectUnauthorized: false } 
+    : false
 })
 
 // 연결 풀 이벤트 리스너
