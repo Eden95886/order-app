@@ -24,19 +24,27 @@ function App() {
     const newOrder = {
       id: Date.now(),
       orderDate: new Date().toISOString(),
-      items: cartItems.map(item => ({
-        menuId: item.menuId,
-        menuName: item.menuName,
-        quantity: item.quantity,
-        options: item.selectedOptions.map((optId, index) => {
-          const optionNames = item.optionNames ? item.optionNames.split(', ') : []
-          return {
+      items: cartItems.map(item => {
+        // 옵션 정보를 올바르게 매핑
+        const optionMap = item.optionNames 
+          ? item.optionNames.split(', ').reduce((map, name, idx) => {
+              const optId = item.selectedOptions[idx]
+              if (optId) map[optId] = name
+              return map
+            }, {})
+          : {}
+        
+        return {
+          menuId: item.menuId,
+          menuName: item.menuName,
+          quantity: item.quantity,
+          options: item.selectedOptions.map(optId => ({
             id: optId,
-            name: optionNames[index] || '옵션'
-          }
-        }),
-        price: item.unitPrice
-      })),
+            name: optionMap[optId] || '옵션'
+          })),
+          price: item.unitPrice
+        }
+      }),
       totalPrice: cartItems.reduce((sum, item) => sum + item.totalPrice, 0),
       status: 'received' // 주문 접수 상태로 시작
     }

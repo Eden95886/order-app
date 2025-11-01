@@ -38,6 +38,8 @@ function AdminPage() {
         return merged
       } catch (e) {
         console.error('재고 데이터 파싱 오류:', e)
+        // 파싱 오류 시 기본값 반환
+        return defaultInventory
       }
     }
     return defaultInventory
@@ -89,22 +91,22 @@ function AdminPage() {
     })
   }
 
-  // 주문에 따른 재고 차감
+  // 주문에 따른 재고 차감 (최적화: 한 번의 setState로 처리)
   const deductStockForOrder = (order) => {
     // 주문 접수 상태인 주문만 재고 차감
     if (order.status === 'received') {
-      order.items.forEach(item => {
-        setInventory(prevInventory => {
-          const updated = prevInventory.map(invItem => {
-            if (invItem.menuId === item.menuId) {
-              const newStock = Math.max(0, invItem.stock - item.quantity)
-              return { ...invItem, stock: newStock }
-            }
-            return invItem
-          })
-          localStorage.setItem('inventory', JSON.stringify(updated))
-          return updated
+      // 모든 재고 변경을 한 번에 처리
+      setInventory(prevInventory => {
+        const updated = prevInventory.map(invItem => {
+          const orderItem = order.items.find(item => item.menuId === invItem.menuId)
+          if (orderItem) {
+            const newStock = Math.max(0, invItem.stock - orderItem.quantity)
+            return { ...invItem, stock: newStock }
+          }
+          return invItem
         })
+        localStorage.setItem('inventory', JSON.stringify(updated))
+        return updated
       })
       // 처리된 주문으로 표시
       setProcessedOrders(prev => {

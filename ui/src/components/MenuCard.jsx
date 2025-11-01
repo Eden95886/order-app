@@ -17,8 +17,8 @@ function MenuCard({ menu, onAddToCart }) {
 
   const handleAddToCart = () => {
     onAddToCart(menu, selectedOptions)
-    // 담기 후 옵션 초기화 (선택사항)
-    // setSelectedOptions([])
+    // 담기 후 옵션 초기화하여 다음 주문 준비
+    setSelectedOptions([])
   }
 
   const totalPrice = menu.price + selectedOptions.reduce((sum, opt) => sum + opt.price, 0)

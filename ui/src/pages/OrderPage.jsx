@@ -117,13 +117,17 @@ function OrderPage({ onOrder }) {
       return
     }
     
-    if (onOrder) {
-      onOrder(cartItems)
+    // 주문 전 검증
+    try {
+      if (onOrder) {
+        onOrder(cartItems)
+      }
+      alert('주문이 접수되었습니다!')
+      setCartItems([])
+    } catch (error) {
+      console.error('주문 처리 오류:', error)
+      alert('주문 처리 중 오류가 발생했습니다. 다시 시도해주세요.')
     }
-    
-    console.log('주문 데이터:', cartItems)
-    alert('주문이 접수되었습니다!')
-    setCartItems([])
   }
 
   const totalAmount = cartItems.reduce((sum, item) => sum + item.totalPrice, 0)
