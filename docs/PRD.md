@@ -337,3 +337,580 @@
 - `"received"`: 주문 접수
 - `"in_progress"`: 제조 중
 - `"completed"`: 제조 완료
+
+## 6. 백엔드 개발 설계
+
+### 6.1 데이터 모델
+
+#### 6.1.1 Menus (메뉴)
+메뉴 정보를 저장하는 테이블입니다.
+
+**필드 구성**:
+- `id` (PRIMARY KEY): 메뉴 고유 ID (자동 증가)
+- `name` (VARCHAR): 커피 이름 (예: "아메리카노(ICE)", "카페라떼")
+- `description` (TEXT): 메뉴 설명 (예: "깔끔하고 부드러운 아이스 아메리카노")
+- `price` (INTEGER): 기본 가격 (원 단위)
+- `image_url` (VARCHAR): 이미지 URL (선택사항, NULL 허용)
+- `stock` (INTEGER): 재고 수량 (기본값: 0)
+- `created_at` (TIMESTAMP): 생성 일시
+- `updated_at` (TIMESTAMP): 수정 일시
+
+**제약 조건**:
+- `name`: 필수, 중복 불가
+- `price`: 필수, 0 이상
+- `stock`: 필수, 0 이상
+
+#### 6.1.2 Options (옵션)
+메뉴에 추가할 수 있는 옵션 정보를 저장하는 테이블입니다.
+
+**필드 구성**:
+- `id` (PRIMARY KEY): 옵션 고유 ID (자동 증가)
+- `name` (VARCHAR): 옵션 이름 (예: "샷 추가", "시럽 추가")
+- `price` (INTEGER): 옵션 추가 가격 (원 단위, 0 가능)
+- `menu_id` (FOREIGN KEY): 연결할 메뉴 ID (Menus 테이블 참조)
+- `created_at` (TIMESTAMP): 생성 일시
+- `updated_at` (TIMESTAMP): 수정 일시
+
+**제약 조건**:
+- `name`: 필수
+- `price`: 필수 (0 이상, 음수 가능하지만 일반적으로 0 이상)
+- `menu_id`: 필수, Menus 테이블의 존재하는 ID 참조
+
+**관계**:
+- 하나의 메뉴는 여러 개의 옵션을 가질 수 있음 (1:N 관계)
+- 옵션은 반드시 하나의 메뉴에 연결됨
+
+#### 6.1.3 Orders (주문)
+주문 정보를 저장하는 테이블입니다.
+
+**필드 구성**:
+- `id` (PRIMARY KEY): 주문 고유 ID (자동 증가)
+- `order_date` (TIMESTAMP): 주문 일시 (주문 접수 시간)
+- `status` (VARCHAR): 주문 상태
+  - `"received"`: 주문 접수 (기본값)
+  - `"in_progress"`: 제조 중
+  - `"completed"`: 제조 완료
+- `total_price` (INTEGER): 주문 총 금액 (원 단위)
+- `created_at` (TIMESTAMP): 생성 일시
+- `updated_at` (TIMESTAMP): 수정 일시
+
+**제약 조건**:
+- `order_date`: 필수
+- `status`: 필수, 위의 3가지 값 중 하나
+- `total_price`: 필수, 0 이상
+
+#### 6.1.4 OrderItems (주문 아이템)
+주문에 포함된 개별 메뉴 아이템을 저장하는 테이블입니다.
+
+**필드 구성**:
+- `id` (PRIMARY KEY): 주문 아이템 고유 ID (자동 증가)
+- `order_id` (FOREIGN KEY): 주문 ID (Orders 테이블 참조)
+- `menu_id` (FOREIGN KEY): 메뉴 ID (Menus 테이블 참조)
+- `quantity` (INTEGER): 주문 수량
+- `unit_price` (INTEGER): 단가 (메뉴 기본 가격 + 선택된 옵션 가격 합계)
+- `created_at` (TIMESTAMP): 생성 일시
+
+**제약 조건**:
+- `order_id`: 필수, Orders 테이블의 존재하는 ID 참조
+- `menu_id`: 필수, Menus 테이블의 존재하는 ID 참조
+- `quantity`: 필수, 1 이상
+- `unit_price`: 필수, 0 이상
+
+**관계**:
+- 하나의 주문은 여러 개의 주문 아이템을 가질 수 있음 (1:N 관계)
+- 주문 아이템은 반드시 하나의 주문에 연결됨
+
+#### 6.1.5 OrderItemOptions (주문 아이템 옵션)
+주문 아이템에 선택된 옵션을 저장하는 테이블입니다.
+
+**필드 구성**:
+- `id` (PRIMARY KEY): 고유 ID (자동 증가)
+- `order_item_id` (FOREIGN KEY): 주문 아이템 ID (OrderItems 테이블 참조)
+- `option_id` (FOREIGN KEY): 옵션 ID (Options 테이블 참조)
+- `created_at` (TIMESTAMP): 생성 일시
+
+**제약 조건**:
+- `order_item_id`: 필수, OrderItems 테이블의 존재하는 ID 참조
+- `option_id`: 필수, Options 테이블의 존재하는 ID 참조
+
+**관계**:
+- 하나의 주문 아이템은 여러 개의 옵션을 가질 수 있음 (1:N 관계)
+- 주문 아이템 옵션은 반드시 하나의 주문 아이템에 연결됨
+
+### 6.2 데이터 스키마를 위한 사용자 흐름
+
+#### 6.2.1 메뉴 목록 조회 및 표시
+**프런트엔드 → 백엔드**:
+1. 주문하기 화면 접속 시 백엔드 API 호출: `GET /api/menus`
+2. 백엔드가 Menus 테이블에서 메뉴 목록 조회
+3. 각 메뉴에 연결된 Options도 함께 조회
+4. 응답 데이터:
+   - 메뉴 정보 (id, name, description, price, image_url)
+   - 각 메뉴의 옵션 목록 (id, name, price)
+
+**백엔드 → 프런트엔드**:
+- 메뉴 목록과 옵션 정보를 JSON 형태로 반환
+- 재고 수량 정보는 별도 API로 제공 (관리자 화면용)
+
+**프런트엔드 처리**:
+- 받은 메뉴 데이터를 카드 형태로 화면에 표시
+- 옵션은 체크박스 형태로 표시
+
+#### 6.2.2 장바구니 관리
+**프런트엔드 처리** (백엔드 미호출):
+1. 사용자가 메뉴 선택 및 옵션 선택
+2. "담기" 버튼 클릭 시 프런트엔드 내부 상태(장바구니)에 추가
+3. 장바구니에는 다음 정보 저장:
+   - 메뉴 ID, 메뉴명
+   - 선택된 옵션 ID 배열
+   - 수량
+   - 계산된 단가 및 총 가격
+
+#### 6.2.3 주문 생성 및 저장
+**프런트엔드 → 백엔드**:
+1. 사용자가 "주문하기" 버튼 클릭
+2. 백엔드 API 호출: `POST /api/orders`
+3. 요청 데이터:
+   ```json
+   {
+     "items": [
+       {
+         "menu_id": 1,
+         "quantity": 2,
+         "option_ids": [1, 2],
+         "unit_price": 4500
+       }
+     ],
+     "total_price": 9000
+   }
+   ```
+
+**백엔드 처리**:
+1. Orders 테이블에 주문 레코드 생성
+   - `order_date`: 현재 시간
+   - `status`: "received" (주문 접수)
+   - `total_price`: 요청에서 받은 총 금액
+2. 각 아이템에 대해 OrderItems 테이블에 레코드 생성
+   - `order_id`: 생성된 주문 ID
+   - `menu_id`: 요청에서 받은 메뉴 ID
+   - `quantity`: 수량
+   - `unit_price`: 단가
+3. 각 옵션에 대해 OrderItemOptions 테이블에 레코드 생성
+4. Menus 테이블의 해당 메뉴 재고(`stock`) 차감
+   - 주문된 수량만큼 재고에서 감소
+   - 재고가 0보다 작아지지 않도록 처리 (0 이하로 내려가지 않음)
+5. 성공 시 생성된 주문 정보 반환
+
+**응답 데이터**:
+```json
+{
+  "id": 123,
+  "order_date": "2024-01-15T10:30:00Z",
+  "status": "received",
+  "total_price": 9000,
+  "items": [...]
+}
+```
+
+#### 6.2.4 관리자 화면 - 재고 현황 표시
+**프런트엔드 → 백엔드**:
+1. 관리자 화면 접속 시 백엔드 API 호출: `GET /api/menus?include_stock=true`
+2. 또는 별도 API: `GET /api/inventory`
+
+**백엔드 처리**:
+1. Menus 테이블에서 모든 메뉴 조회
+2. 각 메뉴의 재고 수량(`stock`) 포함하여 반환
+
+**응답 데이터**:
+```json
+[
+  {
+    "menu_id": 1,
+    "name": "아메리카노(ICE)",
+    "stock": 10
+  },
+  ...
+]
+```
+
+#### 6.2.5 관리자 화면 - 주문 현황 표시
+**프런트엔드 → 백엔드**:
+1. 관리자 화면 접속 시 백엔드 API 호출: `GET /api/orders`
+2. 최신 주문이 먼저 오도록 정렬
+
+**백엔드 처리**:
+1. Orders 테이블에서 모든 주문 조회 (또는 특정 상태 필터링 가능)
+2. `order_date` 기준 내림차순 정렬
+3. 각 주문에 연결된 OrderItems, OrderItemOptions도 함께 조회
+
+**응답 데이터**:
+```json
+[
+  {
+    "id": 123,
+    "order_date": "2024-01-15T10:30:00Z",
+    "status": "received",
+    "total_price": 9000,
+    "items": [
+      {
+        "menu_id": 1,
+        "menu_name": "아메리카노(ICE)",
+        "quantity": 2,
+        "options": [
+          {
+            "id": 1,
+            "name": "샷 추가"
+          }
+        ],
+        "unit_price": 4500
+      }
+    ]
+  },
+  ...
+]
+```
+
+#### 6.2.6 주문 상태 변경
+**프런트엔드 → 백엔드**:
+1. 관리자가 "제조 시작" 또는 "제조 완료" 버튼 클릭
+2. 백엔드 API 호출: `PATCH /api/orders/:orderId/status`
+3. 요청 데이터:
+   ```json
+   {
+     "status": "in_progress"  // 또는 "completed"
+   }
+   ```
+
+**백엔드 처리**:
+1. 해당 주문 ID로 Orders 테이블에서 주문 조회
+2. 주문 상태(`status`) 필드 업데이트
+3. 상태 변경 가능 여부 검증 (예: "received" → "in_progress" → "completed" 순서만 허용)
+
+**응답 데이터**:
+- 업데이트된 주문 정보 반환
+
+### 6.3 API 설계
+
+#### 6.3.1 메뉴 관련 API
+
+##### GET /api/menus
+**설명**: 커피 메뉴 목록 조회
+
+**요청 파라미터**:
+- `include_stock` (쿼리, 선택): 재고 정보 포함 여부 (기본값: false)
+  - `true`: 재고 정보 포함 (관리자 화면용)
+  - `false`: 재고 정보 제외 (주문하기 화면용)
+
+**응답**:
+```json
+{
+  "menus": [
+    {
+      "id": 1,
+      "name": "아메리카노(ICE)",
+      "description": "깔끔하고 부드러운 아이스 아메리카노",
+      "price": 4000,
+      "image_url": "https://example.com/image.jpg",
+      "stock": 10,  // include_stock=true일 때만 포함
+      "options": [
+        {
+          "id": 1,
+          "name": "샷 추가",
+          "price": 500
+        },
+        {
+          "id": 2,
+          "name": "시럽 추가",
+          "price": 0
+        }
+      ]
+    },
+    ...
+  ]
+}
+```
+
+**에러 처리**:
+- 500: 서버 오류
+
+##### GET /api/menus/:menuId
+**설명**: 특정 메뉴 상세 정보 조회
+
+**응답**:
+```json
+{
+  "id": 1,
+  "name": "아메리카노(ICE)",
+  "description": "깔끔하고 부드러운 아이스 아메리카노",
+  "price": 4000,
+  "image_url": "https://example.com/image.jpg",
+  "stock": 10,
+  "options": [...]
+}
+```
+
+**에러 처리**:
+- 404: 메뉴를 찾을 수 없음
+- 500: 서버 오류
+
+#### 6.3.2 재고 관련 API
+
+##### GET /api/inventory
+**설명**: 모든 메뉴의 재고 현황 조회 (관리자 화면용)
+
+**응답**:
+```json
+{
+  "inventory": [
+    {
+      "menu_id": 1,
+      "menu_name": "아메리카노(ICE)",
+      "stock": 10
+    },
+    {
+      "menu_id": 2,
+      "menu_name": "아메리카노(HOT)",
+      "stock": 8
+    },
+    ...
+  ]
+}
+```
+
+##### PATCH /api/menus/:menuId/stock
+**설명**: 특정 메뉴의 재고 수량 변경 (관리자 화면의 +/- 버튼)
+
+**요청 본문**:
+```json
+{
+  "change": 1  // 증가: 양수, 감소: 음수
+}
+```
+
+**응답**:
+```json
+{
+  "menu_id": 1,
+  "menu_name": "아메리카노(ICE)",
+  "stock": 11  // 변경된 재고 수량
+}
+```
+
+**에러 처리**:
+- 400: 잘못된 요청 (예: 재고가 0인데 감소 시도)
+- 404: 메뉴를 찾을 수 없음
+- 500: 서버 오류
+
+#### 6.3.3 주문 관련 API
+
+##### POST /api/orders
+**설명**: 새로운 주문 생성
+
+**요청 본문**:
+```json
+{
+  "items": [
+    {
+      "menu_id": 1,
+      "quantity": 2,
+      "option_ids": [1, 2],
+      "unit_price": 4500
+    },
+    {
+      "menu_id": 3,
+      "quantity": 1,
+      "option_ids": [],
+      "unit_price": 5000
+    }
+  ],
+  "total_price": 14000
+}
+```
+
+**백엔드 처리 로직**:
+1. Orders 테이블에 주문 레코드 생성
+2. 각 아이템에 대해:
+   - OrderItems 테이블에 레코드 생성
+   - OrderItemOptions 테이블에 선택된 옵션 레코드 생성
+   - Menus 테이블의 해당 메뉴 재고 차감 (수량만큼)
+     - 재고가 부족한 경우 에러 반환 (400)
+3. 생성된 주문 정보 반환
+
+**응답**:
+```json
+{
+  "id": 123,
+  "order_date": "2024-01-15T10:30:00Z",
+  "status": "received",
+  "total_price": 14000,
+  "items": [
+    {
+      "menu_id": 1,
+      "menu_name": "아메리카노(ICE)",
+      "quantity": 2,
+      "options": [
+        {
+          "id": 1,
+          "name": "샷 추가"
+        },
+        {
+          "id": 2,
+          "name": "시럽 추가"
+        }
+      ],
+      "unit_price": 4500
+    },
+    ...
+  ]
+}
+```
+
+**에러 처리**:
+- 400: 잘못된 요청 (재고 부족, 유효하지 않은 메뉴/옵션 ID 등)
+- 500: 서버 오류
+
+##### GET /api/orders
+**설명**: 주문 목록 조회 (관리자 화면용)
+
+**요청 파라미터** (선택):
+- `status` (쿼리): 주문 상태 필터링 ("received", "in_progress", "completed")
+- `limit` (쿼리): 조회할 최대 개수
+- `offset` (쿼리): 페이지네이션 오프셋
+
+**응답**:
+```json
+{
+  "orders": [
+    {
+      "id": 123,
+      "order_date": "2024-01-15T10:30:00Z",
+      "status": "received",
+      "total_price": 14000,
+      "items": [...]
+    },
+    ...
+  ],
+  "total": 50,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+**에러 처리**:
+- 500: 서버 오류
+
+##### GET /api/orders/:orderId
+**설명**: 특정 주문 정보 조회
+
+**응답**:
+```json
+{
+  "id": 123,
+  "order_date": "2024-01-15T10:30:00Z",
+  "status": "received",
+  "total_price": 14000,
+  "items": [...]
+}
+```
+
+**에러 처리**:
+- 404: 주문을 찾을 수 없음
+- 500: 서버 오류
+
+##### PATCH /api/orders/:orderId/status
+**설명**: 주문 상태 변경
+
+**요청 본문**:
+```json
+{
+  "status": "in_progress"  // 또는 "completed"
+}
+```
+
+**백엔드 처리 로직**:
+1. 주문 ID로 Orders 테이블에서 주문 조회
+2. 현재 상태와 요청된 상태 검증:
+   - "received" → "in_progress" 가능
+   - "in_progress" → "completed" 가능
+   - 그 외 상태 변경은 에러 반환
+3. 상태 업데이트
+4. 업데이트된 주문 정보 반환
+
+**응답**:
+```json
+{
+  "id": 123,
+  "order_date": "2024-01-15T10:30:00Z",
+  "status": "in_progress",
+  "total_price": 14000,
+  "items": [...]
+}
+```
+
+**에러 처리**:
+- 400: 잘못된 상태 변경 요청
+- 404: 주문을 찾을 수 없음
+- 500: 서버 오류
+
+#### 6.3.4 통계 관련 API
+
+##### GET /api/orders/stats
+**설명**: 주문 통계 조회 (관리자 대시보드용)
+
+**응답**:
+```json
+{
+  "total_orders": 50,
+  "received_orders": 10,
+  "in_progress_orders": 5,
+  "completed_orders": 35
+}
+```
+
+**에러 처리**:
+- 500: 서버 오류
+
+### 6.4 API 공통 사항
+
+#### 6.4.1 응답 형식
+- 성공: HTTP 상태 코드 200 (또는 201 for 생성)
+- 실패: 적절한 HTTP 상태 코드 (400, 404, 500 등)
+
+#### 6.4.2 에러 응답 형식
+```json
+{
+  "error": {
+    "message": "에러 메시지",
+    "code": "ERROR_CODE"  // 선택사항
+  }
+}
+```
+
+#### 6.4.3 데이터 타입
+- 날짜/시간: ISO 8601 형식 (예: "2024-01-15T10:30:00Z")
+- 가격: 정수 (원 단위)
+- ID: 정수 (자동 증가)
+
+#### 6.4.4 CORS 설정
+- 프런트엔드와 백엔드가 다른 포트에서 실행되므로 CORS 설정 필요
+- 허용할 Origin: 프런트엔드 개발 서버 주소 (예: http://localhost:5173)
+
+### 6.5 데이터베이스 관계도 (ERD)
+
+```
+Menus (1) ──< (N) Options
+  │
+  │
+  └──< (N) OrderItems
+            │
+            │
+            └──< (N) OrderItemOptions ──> (N) Options
+
+Orders (1) ──< (N) OrderItems
+```
+
+**관계 설명**:
+- Menus와 Options: 1:N (하나의 메뉴는 여러 옵션을 가짐)
+- Orders와 OrderItems: 1:N (하나의 주문은 여러 주문 아이템을 가짐)
+- OrderItems와 OrderItemOptions: 1:N (하나의 주문 아이템은 여러 옵션을 가짐)
+- OrderItemOptions와 Options: N:1 (여러 주문 아이템 옵션이 하나의 옵션을 참조)
