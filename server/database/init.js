@@ -25,21 +25,26 @@ if (process.env.DATABASE_URL) {
   }
 } else {
   // 개별 환경 변수 사용
-  // DB_HOST에서 호스트만 추출 (URL 형식인 경우)
+  // DB_HOST에서 호스트만 추출 (URL 형식 또는 호스트/데이터베이스 형식인 경우)
   let host = process.env.DB_HOST || 'localhost'
+  
+  // 호스트에 슬래시(/)가 포함되어 있으면 호스트만 추출
   if (host.includes('/')) {
-    // URL 형식인 경우 호스트만 추출
-    try {
-      const url = new URL(`postgresql://${host}`)
-      host = url.hostname
-    } catch (e) {
-      // URL 파싱 실패 시 '/' 앞부분만 사용
-      host = host.split('/')[0]
-    }
+    // 형식: host/database 또는 host:port/database
+    // 호스트 부분만 추출
+    const hostPart = host.split('/')[0]
+    // 포트가 있는 경우: host:port -> host
+    host = hostPart.split(':')[0]
+    console.log(`호스트에서 데이터베이스 이름 제거: ${process.env.DB_HOST} -> ${host}`)
+  }
+  
+  // 포트 번호가 호스트에 포함된 경우 제거
+  if (host.includes(':')) {
+    host = host.split(':')[0]
   }
   
   dbConfig = {
-    host: host,
+    host: host.trim(), // 앞뒤 공백 제거
     port: parseInt(process.env.DB_PORT) || 5432,
     database: process.env.DB_NAME || 'coffee_order_db',
     user: process.env.DB_USER || 'postgres',
