@@ -105,7 +105,30 @@ async function initDatabase() {
     const schemaPath = join(__dirname, 'schema.sql')
     const schema = readFileSync(schemaPath, 'utf-8')
     console.log('스키마 생성 중...')
-    await pool.query(schema)
+    
+    // 스키마를 개별 명령어로 분리하여 실행 (오류 발생 시 계속 진행)
+    const statements = schema
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0 && !s.startsWith('--'))
+    
+    for (const statement of statements) {
+      try {
+        if (statement.trim()) {
+          await pool.query(statement)
+        }
+      } catch (error) {
+        // 이미 존재하는 객체는 무시하고 계속 진행
+        if (error.message.includes('already exists') || 
+            error.message.includes('duplicate key') ||
+            error.code === '42P07') { // relation already exists
+          console.log(`⚠️ 경고 (무시): ${error.message.split('\n')[0]}`)
+        } else {
+          throw error
+        }
+      }
+    }
+    
     console.log('✅ 스키마 생성 완료')
 
     // 시드 파일 읽기 및 실행
