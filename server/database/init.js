@@ -131,19 +131,53 @@ async function initDatabase() {
         }
       }
       
-      // 2. 스키마 파일에서 함수 정의 부분을 제외한 나머지 읽기
+      // 2. 스키마 파일 읽기
       const schemaPath = join(__dirname, 'schema.sql')
       const schemaContent = readFileSync(schemaPath, 'utf-8')
       
-      // 주석과 함수 정의 블록 제거
-      let remainingSQL = schemaContent
+      // 주석 제거
+      let cleanedSchema = schemaContent
         .split('\n')
         .filter(line => !line.trim().startsWith('--'))
         .join('\n')
-        .replace(/CREATE OR REPLACE FUNCTION[\s\S]*?\$\$\s*language\s+['"]plpgsql['"]\s*;/gi, '')
       
-      // 세미콜론으로 구분하여 개별 실행
-      // 단, 빈 줄이나 너무 짧은 문장은 제외
+      // $$ 구분자를 사용하는 블록들 추출 (함수 정의 및 DO 블록)
+      // 1. 함수 정의 추출
+      const functionRegex = /CREATE OR REPLACE FUNCTION[\s\S]*?\$\$\s*language\s+['"]plpgsql['"]\s*;/gi
+      const functionBlock = cleanedSchema.match(functionRegex)?.[0] || null
+      
+      // 2. DO $$ 블록 직접 실행 (안전하게)
+      // 제약조건 추가: options 테이블에 (menu_id, name) UNIQUE 제약조건
+      const addConstraintSQL = `
+        DO $$
+        BEGIN
+            ALTER TABLE options ADD CONSTRAINT options_menu_id_name_key UNIQUE (menu_id, name);
+        EXCEPTION
+            WHEN duplicate_table THEN NULL;
+            WHEN duplicate_object THEN NULL;
+        END $$;
+      `
+      try {
+        await client.query(addConstraintSQL.trim())
+        console.log('✅ 제약조건 추가 완료 (또는 이미 존재)')
+      } catch (error) {
+        if (error.message.includes('already exists') || 
+            error.message.includes('duplicate') ||
+            error.code === '42710' || // duplicate object
+            error.code === '42P16') { // invalid table definition
+          console.log(`⚠️ 경고 (무시): ${error.message.split('\n')[0]}`)
+        } else {
+          // 다른 오류는 로그만 남기고 계속 진행 (제약조건이 없어도 동작 가능)
+          console.log(`⚠️ 제약조건 추가 중 오류 (계속 진행): ${error.message.split('\n')[0]}`)
+        }
+      }
+      
+      // 3. 함수 정의와 DO 블록을 제거한 나머지 SQL
+      let remainingSQL = cleanedSchema
+        .replace(functionRegex, '')
+        .replace(/DO\s+\$\$[\s\S]*?END\s+\$\$\s*;/gi, '')
+      
+      // 나머지 SQL을 세미콜론으로 구분하여 개별 실행
       const statements = remainingSQL
         .split(';')
         .map(s => s.trim())
