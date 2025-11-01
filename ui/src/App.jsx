@@ -1,145 +1,62 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
-import Header from './components/Header'
-import MenuList from './components/MenuList'
-import Cart from './components/Cart'
-
-// 임시 메뉴 데이터
-const menuData = [
-  {
-    id: 1,
-    name: '아메리카노(ICE)',
-    price: 4000,
-    description: '깔끔하고 부드러운 아이스 아메리카노',
-    imageUrl: 'https://images.unsplash.com/photo-1517487881594-2787fef5ebf7?w=400&h=400&fit=crop',
-    options: [
-      { id: 1, name: '샷 추가', price: 500 },
-      { id: 2, name: '시럽 추가', price: 0 }
-    ]
-  },
-  {
-    id: 2,
-    name: '아메리카노(HOT)',
-    price: 4000,
-    description: '따뜻하고 진한 핫 아메리카노',
-    imageUrl: 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=400&h=400&fit=crop',
-    options: [
-      { id: 1, name: '샷 추가', price: 500 },
-      { id: 2, name: '시럽 추가', price: 0 }
-    ]
-  },
-  {
-    id: 3,
-    name: '카페라떼',
-    price: 5000,
-    description: '부드러운 우유와 에스프레소의 조화',
-    imageUrl: 'https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=400&h=400&fit=crop',
-    options: [
-      { id: 1, name: '샷 추가', price: 500 },
-      { id: 2, name: '시럽 추가', price: 0 }
-    ]
-  },
-  {
-    id: 4,
-    name: '카푸치노',
-    price: 5000,
-    description: '에스프레소와 부드러운 우유 거품',
-    imageUrl: 'https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=400&h=400&fit=crop',
-    options: [
-      { id: 1, name: '샷 추가', price: 500 },
-      { id: 2, name: '시럽 추가', price: 0 }
-    ]
-  },
-  {
-    id: 5,
-    name: '바닐라라떼',
-    price: 5500,
-    description: '달콤한 바닐라 시럽이 들어간 라떼',
-    imageUrl: 'https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?w=400&h=400&fit=crop',
-    options: [
-      { id: 1, name: '샷 추가', price: 500 },
-      { id: 2, name: '시럽 추가', price: 0 }
-    ]
-  }
-]
+import OrderPage from './pages/OrderPage'
+import AdminPage from './pages/AdminPage'
 
 function App() {
-  const [cartItems, setCartItems] = useState([])
+  const [currentPage, setCurrentPage] = useState('order')
 
-  const addToCart = (menu, selectedOptions) => {
-    const optionIds = selectedOptions.map(opt => opt.id).sort()
-    const cartKey = `${menu.id}-${optionIds.join(',')}`
-    
-    const existingItem = cartItems.find(item => item.cartKey === cartKey)
-    
-    if (existingItem) {
-      // 동일한 메뉴+옵션 조합이 있으면 수량 증가
-      setCartItems(cartItems.map(item => 
-        item.cartKey === cartKey 
-          ? { ...item, quantity: item.quantity + 1 }
-          : item
-      ))
-    } else {
-      // 새 아이템 추가
-      const basePrice = menu.price
-      const optionsPrice = selectedOptions.reduce((sum, opt) => sum + opt.price, 0)
-      const unitPrice = basePrice + optionsPrice
-      const optionNames = selectedOptions.map(opt => opt.name).join(', ')
-      
-      const newItem = {
-        cartKey,
-        menuId: menu.id,
-        menuName: menu.name,
-        basePrice,
-        selectedOptions: optionIds,
-        optionNames,
-        quantity: 1,
-        unitPrice,
-        totalPrice: unitPrice
-      }
-      
-      setCartItems([...cartItems, newItem])
+  // 네비게이션 이벤트 리스너
+  useEffect(() => {
+    const handleNavigate = (event) => {
+      setCurrentPage(event.detail)
     }
-  }
 
-  const updateCartItemQuantity = (cartKey, newQuantity) => {
-    if (newQuantity <= 0) {
-      setCartItems(cartItems.filter(item => item.cartKey !== cartKey))
-    } else {
-      setCartItems(cartItems.map(item => 
-        item.cartKey === cartKey 
-          ? { ...item, quantity: newQuantity, totalPrice: item.unitPrice * newQuantity }
-          : item
-      ))
+    window.addEventListener('navigate', handleNavigate)
+    return () => {
+      window.removeEventListener('navigate', handleNavigate)
     }
-  }
+  }, [])
 
-  const handleOrder = () => {
-    if (cartItems.length === 0) {
-      alert('장바구니가 비어있습니다.')
-      return
+  // 주문 처리 함수
+  const handleOrder = (cartItems) => {
+    // 주문 생성
+    const newOrder = {
+      id: Date.now(),
+      orderDate: new Date().toISOString(),
+      items: cartItems.map(item => ({
+        menuId: item.menuId,
+        menuName: item.menuName,
+        quantity: item.quantity,
+        options: item.selectedOptions.map((optId, index) => {
+          const optionNames = item.optionNames ? item.optionNames.split(', ') : []
+          return {
+            id: optId,
+            name: optionNames[index] || '옵션'
+          }
+        }),
+        price: item.unitPrice
+      })),
+      totalPrice: cartItems.reduce((sum, item) => sum + item.totalPrice, 0),
+      status: 'received' // 주문 접수 상태로 시작
     }
+
+    // localStorage에 저장
+    const existingOrders = JSON.parse(localStorage.getItem('orders') || '[]')
+    const updatedOrders = [newOrder, ...existingOrders]
+    localStorage.setItem('orders', JSON.stringify(updatedOrders))
     
-    // TODO: 백엔드 API 호출
-    console.log('주문 데이터:', cartItems)
-    alert('주문이 접수되었습니다!')
-    setCartItems([])
+    // 관리자 페이지가 열려있으면 새로고침되도록 이벤트 발생
+    window.dispatchEvent(new CustomEvent('order-updated'))
   }
-
-  const totalAmount = cartItems.reduce((sum, item) => sum + item.totalPrice, 0)
 
   return (
     <div className="app">
-      <Header currentPage="order" />
-      <div className="main-content">
-        <MenuList menus={menuData} onAddToCart={addToCart} />
-        <Cart 
-          items={cartItems} 
-          totalAmount={totalAmount}
-          onUpdateQuantity={updateCartItemQuantity}
-          onOrder={handleOrder}
-        />
-      </div>
+      {currentPage === 'order' ? (
+        <OrderPage onOrder={handleOrder} />
+      ) : (
+        <AdminPage />
+      )}
     </div>
   )
 }

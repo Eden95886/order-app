@@ -1,0 +1,15 @@
+.admin-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+@media (min-width: 768px) {
+  .admin-content {
+    padding: 30px;
+  }
+}
+
