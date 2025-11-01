@@ -1,69 +1,30 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Header from '../components/Header'
 import MenuList from '../components/MenuList'
 import Cart from '../components/Cart'
-
-// 임시 메뉴 데이터
-const menuData = [
-  {
-    id: 1,
-    name: '아메리카노(ICE)',
-    price: 4000,
-    description: '깔끔하고 부드러운 아이스 아메리카노',
-    imageUrl: 'https://images.unsplash.com/photo-1517487881594-2787fef5ebf7?w=400&h=400&fit=crop',
-    options: [
-      { id: 1, name: '샷 추가', price: 500 },
-      { id: 2, name: '시럽 추가', price: 0 }
-    ]
-  },
-  {
-    id: 2,
-    name: '아메리카노(HOT)',
-    price: 4000,
-    description: '따뜻하고 진한 핫 아메리카노',
-    imageUrl: 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=400&h=400&fit=crop',
-    options: [
-      { id: 1, name: '샷 추가', price: 500 },
-      { id: 2, name: '시럽 추가', price: 0 }
-    ]
-  },
-  {
-    id: 3,
-    name: '카페라떼',
-    price: 5000,
-    description: '부드러운 우유와 에스프레소의 조화',
-    imageUrl: 'https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=400&h=400&fit=crop',
-    options: [
-      { id: 1, name: '샷 추가', price: 500 },
-      { id: 2, name: '시럽 추가', price: 0 }
-    ]
-  },
-  {
-    id: 4,
-    name: '카푸치노',
-    price: 5000,
-    description: '에스프레소와 부드러운 우유 거품',
-    imageUrl: 'https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=400&h=400&fit=crop',
-    options: [
-      { id: 1, name: '샷 추가', price: 500 },
-      { id: 2, name: '시럽 추가', price: 0 }
-    ]
-  },
-  {
-    id: 5,
-    name: '바닐라라떼',
-    price: 5500,
-    description: '달콤한 바닐라 시럽이 들어간 라떼',
-    imageUrl: 'https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?w=400&h=400&fit=crop',
-    options: [
-      { id: 1, name: '샷 추가', price: 500 },
-      { id: 2, name: '시럽 추가', price: 0 }
-    ]
-  }
-]
+import { menuAPI, orderAPI } from '../utils/api'
 
 function OrderPage({ onOrder }) {
+  const [menuData, setMenuData] = useState([])
   const [cartItems, setCartItems] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  // 메뉴 데이터 로드
+  useEffect(() => {
+    const loadMenus = async () => {
+      try {
+        setLoading(true)
+        const response = await menuAPI.getMenus(false)
+        setMenuData(response.menus || [])
+      } catch (error) {
+        console.error('메뉴 로드 오류:', error)
+        alert('메뉴를 불러오는 중 오류가 발생했습니다.')
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadMenus()
+  }, [])
 
   const addToCart = (menu, selectedOptions) => {
     const optionIds = selectedOptions.map(opt => opt.id).sort()
@@ -111,26 +72,51 @@ function OrderPage({ onOrder }) {
     }
   }
 
-  const handleOrder = () => {
+  const handleOrder = async () => {
     if (cartItems.length === 0) {
       alert('장바구니가 비어있습니다.')
       return
     }
     
-    // 주문 전 검증
     try {
-      if (onOrder) {
-        onOrder(cartItems)
+      // 주문 데이터 준비
+      const orderData = {
+        items: cartItems.map(item => ({
+          menu_id: item.menuId,
+          quantity: item.quantity,
+          option_ids: item.selectedOptions || [],
+          unit_price: item.unitPrice
+        })),
+        total_price: cartItems.reduce((sum, item) => sum + item.totalPrice, 0)
       }
+
+      // API로 주문 전송
+      const orderResult = await orderAPI.createOrder(orderData)
+      
+      // 성공 시 처리
       alert('주문이 접수되었습니다!')
       setCartItems([])
+      
+      // 부모 컴포넌트에 알림 (이벤트 발생)
+      window.dispatchEvent(new CustomEvent('order-updated'))
     } catch (error) {
       console.error('주문 처리 오류:', error)
-      alert('주문 처리 중 오류가 발생했습니다. 다시 시도해주세요.')
+      alert(error.message || '주문 처리 중 오류가 발생했습니다. 다시 시도해주세요.')
     }
   }
 
   const totalAmount = cartItems.reduce((sum, item) => sum + item.totalPrice, 0)
+
+  if (loading) {
+    return (
+      <>
+        <Header currentPage="order" />
+        <div className="main-content">
+          <div style={{ textAlign: 'center', padding: '2rem' }}>메뉴를 불러오는 중...</div>
+        </div>
+      </>
+    )
+  }
 
   return (
     <>

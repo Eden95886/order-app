@@ -19,10 +19,17 @@ app.get('/', (req, res) => {
   res.json({ message: '커피 주문 앱 백엔드 서버' })
 })
 
-// API 라우트 (추후 구현)
-// app.use('/api/menus', menuRoutes)
-// app.use('/api/orders', orderRoutes)
-// app.use('/api/inventory', inventoryRoutes)
+// API 라우트
+import menuRoutes from './routes/menus.js'
+import orderRoutes from './routes/orders.js'
+import inventoryRoutes from './routes/inventory.js'
+import statsRoutes from './routes/stats.js'
+
+app.use('/api/menus', menuRoutes)
+app.use('/api/inventory', inventoryRoutes)
+// stats 라우트를 orders 라우트보다 먼저 등록 (더 구체적인 경로가 우선)
+app.use('/api/orders/stats', statsRoutes)
+app.use('/api/orders', orderRoutes)
 
 // 404 핸들러
 app.use((req, res) => {
