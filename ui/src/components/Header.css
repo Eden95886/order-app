@@ -1,0 +1,64 @@
+.header {
+  background-color: #ffffff;
+  border-bottom: 2px solid #5a7c9a;
+  padding: 0;
+  box-shadow: 0 2px 8px rgba(90, 124, 154, 0.1);
+}
+
+.header-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+}
+
+.brand-name {
+  display: inline-block;
+  padding: 8px 16px;
+  background-color: #4a6fa5;
+  border: 1px solid #3d5a80;
+  font-weight: bold;
+  font-size: 18px;
+  color: #ffffff;
+  border-radius: 4px;
+}
+
+.navigation {
+  display: flex;
+  gap: 10px;
+}
+
+.nav-button {
+  padding: 8px 16px;
+  border: 2px solid #4a6fa5;
+  background-color: #fff;
+  color: #4a6fa5;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.nav-button:hover {
+  background-color: #e8ecf1;
+  border-color: #3d5a80;
+}
+
+.nav-button.active {
+  background-color: #4a6fa5;
+  color: #fff;
+  border-color: #3d5a80;
+}
+
+.nav-button.active:hover {
+  background-color: #3d5a80;
+}
+

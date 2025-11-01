@@ -1,0 +1,116 @@
+.menu-card {
+  background-color: #fff;
+  border: 1px solid #a0b4c7;
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 2px 6px rgba(90, 124, 154, 0.1);
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.menu-card:hover {
+  box-shadow: 0 4px 12px rgba(90, 124, 154, 0.2);
+  border-color: #7d9db8;
+}
+
+.menu-image {
+  width: 100%;
+  aspect-ratio: 1;
+  background-color: #e8ecf1;
+  border: 1px solid #a0b4c7;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.menu-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #7d9db8;
+  font-size: 14px;
+  background-color: #e8ecf1;
+}
+
+.menu-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.menu-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #3d5a80;
+  margin: 0;
+}
+
+.menu-price {
+  font-size: 16px;
+  font-weight: 600;
+  color: #4a6fa5;
+  margin: 0;
+}
+
+.menu-description {
+  font-size: 14px;
+  color: #5a7c9a;
+  margin: 0;
+}
+
+.menu-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.option-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #2c3e50;
+}
+
+.option-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #4a6fa5;
+}
+
+.add-to-cart-button {
+  width: 100%;
+  padding: 12px;
+  background-color: #4a6fa5;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  margin-top: auto;
+}
+
+.add-to-cart-button:hover {
+  background-color: #3d5a80;
+}
+
+.add-to-cart-button:active {
+  background-color: #2e4560;
+}
+
