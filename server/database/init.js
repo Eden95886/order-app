@@ -158,9 +158,12 @@ async function initDatabase() {
           // 이미 존재하는 객체는 무시하고 계속 진행
           if (error.message.includes('already exists') || 
               error.message.includes('duplicate key') ||
+              error.message.includes('duplicate table') ||
+              error.message.includes('duplicate object') ||
               error.code === '42P07' || // relation already exists
               error.code === '42710' || // duplicate object
-              error.code === '42723') { // function already exists
+              error.code === '42723' || // function already exists
+              error.code === '42P16') { // invalid table definition (제약조건 관련)
             console.log(`⚠️ 경고 (무시): ${error.message.split('\n')[0]}`)
           } else {
             // 심각한 오류는 재throw

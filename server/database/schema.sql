@@ -61,6 +61,19 @@ CREATE INDEX IF NOT EXISTS idx_order_item_options_option_id ON order_item_option
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_order_date ON orders(order_date DESC);
 
+-- 기존 테이블에 UNIQUE 제약조건 추가 (이미 존재하는 테이블의 경우)
+-- options 테이블에 (menu_id, name) UNIQUE 제약조건 추가
+-- 제약조건 추가 시도 (이미 존재하면 오류 발생하지만 init.js에서 무시함)
+-- 더 안전한 방법: ALTER TABLE ... IF NOT EXISTS는 지원하지 않으므로
+-- DO 블록으로 예외 처리
+DO $$
+BEGIN
+    ALTER TABLE options ADD CONSTRAINT options_menu_id_name_key UNIQUE (menu_id, name);
+EXCEPTION
+    WHEN duplicate_table THEN NULL; -- 이미 존재하면 무시
+    WHEN duplicate_object THEN NULL; -- 이미 존재하면 무시
+END $$;
+
 -- updated_at 자동 업데이트를 위한 트리거 함수
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
