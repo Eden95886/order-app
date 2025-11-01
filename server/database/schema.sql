@@ -19,7 +19,9 @@ CREATE TABLE IF NOT EXISTS options (
     price INTEGER NOT NULL DEFAULT 0 CHECK (price >= 0),
     menu_id INTEGER NOT NULL REFERENCES menus(id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- 같은 메뉴에 같은 이름의 옵션이 중복되지 않도록 제약
+    UNIQUE(menu_id, name)
 );
 
 -- Orders 테이블 생성

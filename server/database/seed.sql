@@ -11,11 +11,22 @@ ON CONFLICT (name) DO NOTHING;
 
 -- 옵션 데이터 삽입 (모든 메뉴에 공통 옵션 추가)
 -- 각 메뉴에 "샷 추가"와 "시럽 추가" 옵션 추가
+-- 중복 체크: 같은 메뉴에 같은 이름의 옵션이 이미 있는지 확인
 INSERT INTO options (name, price, menu_id)
-SELECT '샷 추가', 500, id FROM menus
-ON CONFLICT DO NOTHING;
+SELECT DISTINCT '샷 추가', 500, m.id 
+FROM menus m
+WHERE NOT EXISTS (
+    SELECT 1 FROM options o 
+    WHERE o.menu_id = m.id AND o.name = '샷 추가'
+)
+ON CONFLICT (menu_id, name) DO NOTHING;
 
 INSERT INTO options (name, price, menu_id)
-SELECT '시럽 추가', 0, id FROM menus
-ON CONFLICT DO NOTHING;
+SELECT DISTINCT '시럽 추가', 0, m.id 
+FROM menus m
+WHERE NOT EXISTS (
+    SELECT 1 FROM options o 
+    WHERE o.menu_id = m.id AND o.name = '시럽 추가'
+)
+ON CONFLICT (menu_id, name) DO NOTHING;
 

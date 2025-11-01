@@ -15,7 +15,15 @@ function OrderPage({ onOrder }) {
       try {
         setLoading(true)
         const response = await menuAPI.getMenus(false)
-        setMenuData(response.menus || [])
+        // 옵션 중복 제거 (같은 메뉴에 같은 이름의 옵션이 여러 개인 경우)
+        const menus = (response.menus || []).map(menu => ({
+          ...menu,
+          options: menu.options ? menu.options.filter((option, index, self) => 
+            // 같은 이름의 옵션 중 첫 번째 것만 유지
+            self.findIndex(opt => opt.name === option.name) === index
+          ) : []
+        }))
+        setMenuData(menus)
       } catch (error) {
         console.error('메뉴 로드 오류:', error)
         alert('메뉴를 불러오는 중 오류가 발생했습니다.')
