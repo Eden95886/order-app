@@ -101,35 +101,88 @@ async function initDatabase() {
     // 실제 데이터베이스에 연결
     const pool = new Pool(dbConfig)
 
-    // 스키마 파일 읽기 및 실행
-    const schemaPath = join(__dirname, 'schema.sql')
-    const schema = readFileSync(schemaPath, 'utf-8')
+    // 스키마 파일을 안전하게 실행
+    // PostgreSQL 함수 정의($$ 구분자)를 포함한 복잡한 SQL을 처리
     console.log('스키마 생성 중...')
     
-    // 스키마를 개별 명령어로 분리하여 실행 (오류 발생 시 계속 진행)
-    const statements = schema
-      .split(';')
-      .map(s => s.trim())
-      .filter(s => s.length > 0 && !s.startsWith('--'))
+    const client = await pool.connect()
     
-    for (const statement of statements) {
+    try {
+      await client.query('BEGIN')
+      
+      // 1. 함수 정의 먼저 실행 ($$ 구분자 때문에 별도 처리)
+      const functionSQL = `
+        CREATE OR REPLACE FUNCTION update_updated_at_column()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            NEW.updated_at = CURRENT_TIMESTAMP;
+            RETURN NEW;
+        END;
+        $$ language 'plpgsql';
+      `
       try {
-        if (statement.trim()) {
-          await pool.query(statement)
-        }
+        await client.query(functionSQL)
+        console.log('✅ 트리거 함수 생성 완료')
       } catch (error) {
-        // 이미 존재하는 객체는 무시하고 계속 진행
-        if (error.message.includes('already exists') || 
-            error.message.includes('duplicate key') ||
-            error.code === '42P07') { // relation already exists
-          console.log(`⚠️ 경고 (무시): ${error.message.split('\n')[0]}`)
+        if (error.code === '42723') { // function already exists
+          console.log('⚠️ 트리거 함수는 이미 존재합니다.')
         } else {
           throw error
         }
       }
+      
+      // 2. 스키마 파일에서 함수 정의 부분을 제외한 나머지 읽기
+      const schemaPath = join(__dirname, 'schema.sql')
+      const schemaContent = readFileSync(schemaPath, 'utf-8')
+      
+      // 주석과 함수 정의 블록 제거
+      let remainingSQL = schemaContent
+        .split('\n')
+        .filter(line => !line.trim().startsWith('--'))
+        .join('\n')
+        .replace(/CREATE OR REPLACE FUNCTION[\s\S]*?\$\$\s*language\s+['"]plpgsql['"]\s*;/gi, '')
+      
+      // 세미콜론으로 구분하여 개별 실행
+      // 단, 빈 줄이나 너무 짧은 문장은 제외
+      const statements = remainingSQL
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.length > 10) // 최소 길이 체크
+      
+      for (const statement of statements) {
+        if (!statement) continue
+        
+        try {
+          await client.query(statement + ';')
+        } catch (error) {
+          // 이미 존재하는 객체는 무시하고 계속 진행
+          if (error.message.includes('already exists') || 
+              error.message.includes('duplicate key') ||
+              error.code === '42P07' || // relation already exists
+              error.code === '42710' || // duplicate object
+              error.code === '42723') { // function already exists
+            console.log(`⚠️ 경고 (무시): ${error.message.split('\n')[0]}`)
+          } else {
+            // 심각한 오류는 재throw
+            console.error(`❌ SQL 실행 오류: ${statement.substring(0, 100)}...`)
+            throw error
+          }
+        }
+      }
+      
+      await client.query('COMMIT')
+      console.log('✅ 스키마 생성 완료')
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK')
+      } catch (rollbackError) {
+        // 롤백 오류는 무시
+      }
+      console.error('❌ 스키마 생성 중 오류:', error.message)
+      throw error
+    } finally {
+      client.release()
     }
-    
-    console.log('✅ 스키마 생성 완료')
 
     // 시드 파일 읽기 및 실행
     const seedPath = join(__dirname, 'seed.sql')
