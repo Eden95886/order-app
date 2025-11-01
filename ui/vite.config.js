@@ -9,4 +9,10 @@ export default defineConfig({
     port: 5173,
     strictPort: false,
   },
+  // 프로덕션 빌드 최적화
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    sourcemap: false, // 프로덕션에서는 소스맵 비활성화 (선택사항)
+  },
 })
