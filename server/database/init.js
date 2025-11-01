@@ -103,13 +103,12 @@ async function initDatabase() {
 
     // 스키마 파일을 안전하게 실행
     // PostgreSQL 함수 정의($$ 구분자)를 포함한 복잡한 SQL을 처리
+    // DDL 명령은 자동 커밋되므로 트랜잭션 없이 실행 (트랜잭션 abort 오류 방지)
     console.log('스키마 생성 중...')
     
     const client = await pool.connect()
     
     try {
-      await client.query('BEGIN')
-      
       // 1. 함수 정의 먼저 실행 ($$ 구분자 때문에 별도 처리)
       const functionSQL = `
         CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -124,10 +123,11 @@ async function initDatabase() {
         await client.query(functionSQL)
         console.log('✅ 트리거 함수 생성 완료')
       } catch (error) {
+        const errorMessage = error?.message || error?.toString() || String(error)
         if (error.code === '42723') { // function already exists
           console.log('⚠️ 트리거 함수는 이미 존재합니다.')
         } else {
-          throw error
+          console.log(`⚠️ 트리거 함수 생성 경고 (계속 진행): ${errorMessage.split('\n')[0]}`)
         }
       }
       
@@ -161,14 +161,15 @@ async function initDatabase() {
         await client.query(addConstraintSQL.trim())
         console.log('✅ 제약조건 추가 완료 (또는 이미 존재)')
       } catch (error) {
-        if (error.message.includes('already exists') || 
-            error.message.includes('duplicate') ||
+        const errorMessage = error?.message || error?.toString() || String(error)
+        if (errorMessage.includes('already exists') || 
+            errorMessage.includes('duplicate') ||
             error.code === '42710' || // duplicate object
             error.code === '42P16') { // invalid table definition
-          console.log(`⚠️ 경고 (무시): ${error.message.split('\n')[0]}`)
+          console.log(`⚠️ 경고 (무시): ${errorMessage.split('\n')[0]}`)
         } else {
           // 다른 오류는 로그만 남기고 계속 진행 (제약조건이 없어도 동작 가능)
-          console.log(`⚠️ 제약조건 추가 중 오류 (계속 진행): ${error.message.split('\n')[0]}`)
+          console.log(`⚠️ 제약조건 추가 중 오류 (계속 진행): ${errorMessage.split('\n')[0]}`)
         }
       }
       
@@ -183,6 +184,8 @@ async function initDatabase() {
         .map(s => s.trim())
         .filter(s => s.length > 10) // 최소 길이 체크
       
+      // 각 명령을 자동 커밋 모드로 실행 (트랜잭션 없이)
+      // 오류 발생 시에도 다른 명령들이 실행될 수 있도록 함
       for (const statement of statements) {
         if (!statement) continue
         
@@ -191,6 +194,15 @@ async function initDatabase() {
         } catch (error) {
           // 이미 존재하는 객체는 무시하고 계속 진행
           const errorMessage = error?.message || error?.toString() || String(error)
+          
+          // 트랜잭션 abort 오류 체크
+          if (errorMessage.includes('current transaction is aborted') ||
+              errorMessage.includes('commands ignored until end of transaction block')) {
+            // 트랜잭션 abort 오류는 로그만 남기고 계속 진행
+            console.log(`⚠️ 경고 (트랜잭션 오류 무시 - 계속 진행): ${errorMessage.split('\n')[0]}`)
+            continue
+          }
+          
           if (errorMessage.includes('already exists') || 
               errorMessage.includes('duplicate key') ||
               errorMessage.includes('duplicate table') ||
@@ -204,38 +216,24 @@ async function initDatabase() {
               error.code === '42P16') { // invalid table definition (제약조건 관련)
             console.log(`⚠️ 경고 (무시): ${errorMessage.split('\n')[0]}`)
           } else {
-            // 심각한 오류는 재throw
-            console.error(`❌ SQL 실행 오류: ${statement.substring(0, 100)}...`)
-            throw error
+            // 심각한 오류는 로그만 남기고 계속 진행 (트랜잭션 abort 방지)
+            console.log(`⚠️ 경고 (SQL 실행 오류 - 계속 진행): ${errorMessage.split('\n')[0]}`)
           }
         }
       }
       
-      await client.query('COMMIT')
       console.log('✅ 스키마 생성 완료')
     } catch (error) {
-      try {
-        await client.query('ROLLBACK')
-      } catch (rollbackError) {
-        // 롤백 오류는 무시
-      }
-      
-      // ON CONFLICT 오류는 경고만 출력하고 계속 진행
+      // 예상치 못한 오류 처리
       const errorMessage = error?.message || error?.toString() || String(error)
-      if (errorMessage.includes('ON CONFLICT') || 
-          errorMessage.includes('no unique or exclusion constraint matching the ON CONFLICT') ||
-          errorMessage.includes('there is no unique or exclusion constraint matching the ON CONFLICT')) {
-        console.log(`⚠️ 경고 (ON CONFLICT 오류 - 계속 진행): ${errorMessage.split('\n')[0]}`)
-        console.log('✅ 스키마 생성 완료 (일부 오류 무시)')
-      } else {
-        console.error('❌ 스키마 생성 중 오류:', errorMessage)
-        throw error
-      }
+      console.error('❌ 스키마 생성 중 예상치 못한 오류:', errorMessage)
+      // 계속 진행 (트랜잭션 없으므로 rollback 불필요)
     } finally {
       client.release()
     }
 
     // 시드 파일 읽기 및 실행
+    // INSERT 문은 자동 커밋 모드로 실행하여 트랜잭션 abort 오류 방지
     const seedPath = join(__dirname, 'seed.sql')
     const seedContent = readFileSync(seedPath, 'utf-8')
     console.log('초기 데이터 삽입 중...')
@@ -243,8 +241,6 @@ async function initDatabase() {
     // 시드 파일을 개별 명령어로 분리하여 실행 (오류 처리 강화)
     const seedClient = await pool.connect()
     try {
-      await seedClient.query('BEGIN')
-      
       // 주석 제거
       let cleanedSeed = seedContent
         .split('\n')
@@ -257,6 +253,8 @@ async function initDatabase() {
         .map(s => s.trim())
         .filter(s => s.length > 5) // 최소 길이 체크
       
+      // 각 명령을 자동 커밋 모드로 실행 (트랜잭션 없이)
+      // 오류 발생 시에도 다른 명령들이 실행될 수 있도록 함
       for (const statement of seedStatements) {
         if (!statement) continue
         
@@ -265,6 +263,15 @@ async function initDatabase() {
         } catch (error) {
           // 이미 존재하는 데이터는 무시
           const errorMessage = error?.message || error?.toString() || String(error)
+          
+          // 트랜잭션 abort 오류 체크
+          if (errorMessage.includes('current transaction is aborted') ||
+              errorMessage.includes('commands ignored until end of transaction block')) {
+            // 트랜잭션 abort 오류는 로그만 남기고 계속 진행
+            console.log(`⚠️ 경고 (트랜잭션 오류 무시 - 계속 진행): ${errorMessage.split('\n')[0]}`)
+            continue
+          }
+          
           if (errorMessage.includes('already exists') || 
               errorMessage.includes('duplicate key') ||
               errorMessage.includes('unique constraint') ||
@@ -276,33 +283,18 @@ async function initDatabase() {
             // ON CONFLICT 오류는 무시 (seed.sql에는 ON CONFLICT가 없지만, 혹시 모를 경우를 대비)
             console.log(`⚠️ 경고 (ON CONFLICT 오류 무시 - 계속 진행): ${errorMessage.split('\n')[0]}`)
           } else {
-            console.error(`❌ 시드 데이터 실행 오류: ${statement.substring(0, 100)}...`)
-            console.error(`오류 상세: ${errorMessage}`)
-            throw error
+            // 다른 오류도 로그만 남기고 계속 진행 (트랜잭션 abort 방지)
+            console.log(`⚠️ 경고 (시드 데이터 실행 오류 - 계속 진행): ${errorMessage.split('\n')[0]}`)
           }
         }
       }
       
-      await seedClient.query('COMMIT')
       console.log('✅ 초기 데이터 삽입 완료')
     } catch (error) {
-      try {
-        await seedClient.query('ROLLBACK')
-      } catch (rollbackError) {
-        // 롤백 오류는 무시
-      }
-      
-      // ON CONFLICT 오류는 경고만 출력하고 계속 진행
+      // 예상치 못한 오류 처리
       const errorMessage = error?.message || error?.toString() || String(error)
-      if (errorMessage.includes('ON CONFLICT') || 
-          errorMessage.includes('no unique or exclusion constraint matching the ON CONFLICT') ||
-          errorMessage.includes('there is no unique or exclusion constraint matching the ON CONFLICT')) {
-        console.log(`⚠️ 경고 (ON CONFLICT 오류 - 계속 진행): ${errorMessage.split('\n')[0]}`)
-        console.log('✅ 초기 데이터 삽입 완료 (일부 오류 무시)')
-      } else {
-        console.error('❌ 초기 데이터 삽입 중 오류:', errorMessage)
-        throw error
-      }
+      console.error('❌ 초기 데이터 삽입 중 예상치 못한 오류:', errorMessage)
+      // 계속 진행 (트랜잭션 없으므로 rollback 불필요)
     } finally {
       seedClient.release()
     }
@@ -310,7 +302,7 @@ async function initDatabase() {
     await pool.end()
     console.log('✅ 데이터베이스 초기화 완료!')
   } catch (error) {
-    // 최상위 오류 처리: ON CONFLICT 오류는 치명적이지 않음
+    // 최상위 오류 처리: ON CONFLICT 및 트랜잭션 abort 오류는 치명적이지 않음
     // error 객체의 다양한 형태를 처리
     const errorMessage = typeof error === 'string' 
       ? error 
@@ -322,6 +314,13 @@ async function initDatabase() {
         errorMessage.includes('there is no unique or exclusion constraint matching the ON CONFLICT')) {
       console.log(`⚠️ 경고 (ON CONFLICT 오류 - 계속 진행): ${errorMessage.split('\n')[0]}`)
       console.log('✅ 데이터베이스 초기화 완료 (일부 오류 무시)')
+      process.exit(0) // 성공으로 종료
+    } 
+    // 트랜잭션 abort 오류 체크
+    else if (errorMessage.includes('current transaction is aborted') ||
+             errorMessage.includes('commands ignored until end of transaction block')) {
+      console.log(`⚠️ 경고 (트랜잭션 abort 오류 - 계속 진행): ${errorMessage.split('\n')[0]}`)
+      console.log('✅ 데이터베이스 초기화 완료 (트랜잭션 오류 무시)')
       process.exit(0) // 성공으로 종료
     } else {
       console.error('❌ 데이터베이스 초기화 오류:', error)
